@@ -1,0 +1,23 @@
+# Local configuration and credentials
+.env
+.env.local
+backend/.env
+frontend/.env
+
+# Runtime logs
+*.log
+logs/
+
+# Node.js dependencies and build output
+node_modules/
+dist/
+coverage/
+data/*.db
+data/*.db-shm
+data/*.db-wal
+
+# Editor and operating-system files
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
