@@ -5,7 +5,7 @@ import { Server } from 'socket.io';
 import { z } from 'zod';
 import { CommandService } from './commands/command-service.js';
 import { env } from './config/env.js';
-import { getCommandHistory, getEventHistory, getTelemetryRange, saveCommand, saveEvent, saveTelemetry } from './database/database.js';
+import { createRepositories } from './database/database.js';
 import { EventService } from './events/event-service.js';
 import { startMqttBridge } from './mqtt/mqtt-client.js';
 import { DeviceStateStore } from './state/device-state.js';
@@ -13,6 +13,13 @@ import { DeviceStateStore } from './state/device-state.js';
 const app = express();
 const httpServer = createServer(app);
 const stateStore = new DeviceStateStore(env.DEVICE_ID, env.DEVICE_OFFLINE_AFTER_SECONDS);
+const repositories = createRepositories();
+
+function persist(operation: Promise<void>, context: string): void {
+  void operation.catch((error) => {
+    console.error(`Database operation failed (${context}):`, error);
+  });
+}
 
 const io = new Server(httpServer, {
   cors: {
@@ -29,13 +36,15 @@ const settingsSchema = z.object({
   mode: z.enum(['SMART', 'CONTINUOUS']),
 });
 
-app.get('/api/health', (_request, response) => {
+app.get('/api/health', async (_request, response) => {
   const state = stateStore.getState();
+  const databaseConnected = await repositories.checkHealth();
   response.json({
     application: 'nhiet-am-mqtt-api',
     mqtt: state.mqttStatus,
-    database: 'connected',
-    status: state.mqttStatus === 'connected' ? 'ok' : 'degraded',
+    database: databaseConnected ? 'connected' : 'disconnected',
+    databaseDriver: env.DATABASE_DRIVER,
+    status: state.mqttStatus === 'connected' && databaseConnected ? 'ok' : 'degraded',
   });
 });
 
@@ -48,30 +57,45 @@ app.get('/api/devices/:deviceId/state', (request, response) => {
   response.json(stateStore.getState());
 });
 
-app.get('/api/devices/:deviceId/telemetry', (request, response) => {
+app.get('/api/devices/:deviceId/telemetry', async (request, response) => {
   if (request.params.deviceId !== env.DEVICE_ID) {
     response.status(404).json({ error: 'Device not found.' });
     return;
   }
   const requestedHours = Number(request.query.hours ?? 1);
   const hours = [1, 6, 24].includes(requestedHours) ? requestedHours : 1;
-  response.json(getTelemetryRange(env.DEVICE_ID, hours));
+  try {
+    response.json(await repositories.telemetry.getRange(env.DEVICE_ID, hours));
+  } catch (error) {
+    console.error('Failed to load telemetry history:', error);
+    response.status(503).json({ error: 'Không thể tải dữ liệu lịch sử.' });
+  }
 });
 
-app.get('/api/devices/:deviceId/commands', (request, response) => {
+app.get('/api/devices/:deviceId/commands', async (request, response) => {
   if (request.params.deviceId !== env.DEVICE_ID) {
     response.status(404).json({ error: 'Device not found.' });
     return;
   }
-  response.json(getCommandHistory(env.DEVICE_ID, 20));
+  try {
+    response.json(await repositories.commands.getHistory(env.DEVICE_ID, 20));
+  } catch (error) {
+    console.error('Failed to load command history:', error);
+    response.status(503).json({ error: 'Không thể tải nhật ký điều khiển.' });
+  }
 });
 
-app.get('/api/devices/:deviceId/events', (request, response) => {
+app.get('/api/devices/:deviceId/events', async (request, response) => {
   if (request.params.deviceId !== env.DEVICE_ID) {
     response.status(404).json({ error: 'Device not found.' });
     return;
   }
-  response.json(getEventHistory(env.DEVICE_ID, 30));
+  try {
+    response.json(await repositories.events.getHistory(env.DEVICE_ID, 30));
+  } catch (error) {
+    console.error('Failed to load event history:', error);
+    response.status(503).json({ error: 'Không thể tải nhật ký sự kiện.' });
+  }
 });
 
 io.on('connection', (socket) => {
@@ -81,7 +105,7 @@ io.on('connection', (socket) => {
 let commandService: CommandService | undefined;
 
 const eventService = new EventService(env.DEVICE_ID, (event) => {
-  saveEvent(event);
+  persist(repositories.events.save(event), `save event ${event.id}`);
   io.emit('event:new', event);
 });
 
@@ -94,7 +118,7 @@ const mqttClient = startMqttBridge(env, {
     commandService?.handleDeviceResponse(deviceResponse);
   },
   onTelemetry(telemetry) {
-    saveTelemetry(telemetry);
+    persist(repositories.telemetry.save(telemetry), `save telemetry for ${telemetry.deviceId}`);
     const state = stateStore.updateTelemetry(telemetry);
     eventService.handleState(state);
     commandService?.handleTelemetry(telemetry);
@@ -115,7 +139,7 @@ commandService = new CommandService({
     });
   },
   onUpdate(command) {
-    saveCommand(command);
+    persist(repositories.commands.save(command), `save command ${command.id}`);
     io.emit('command:update', command);
   },
   timeoutMs: 15_000,
@@ -144,11 +168,47 @@ app.post('/api/devices/:deviceId/commands', async (request, response) => {
   }
 });
 
-setInterval(() => {
+const statusTimer = setInterval(() => {
   const state = stateStore.getState();
   eventService.handleState(state);
   io.emit('device:status-changed', state);
 }, 5_000).unref();
+
+let shuttingDown = false;
+
+async function shutdown(signal: string): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`Received ${signal}. Shutting down...`);
+  clearInterval(statusTimer);
+
+  const results = await Promise.allSettled([
+    new Promise<void>((resolve, reject) => {
+      mqttClient.end(true, {}, (error) => {
+        if (error) reject(error);
+        else resolve();
+      });
+    }),
+    new Promise<void>((resolve, reject) => {
+      io.close((error) => {
+        if (error) reject(error);
+        else resolve();
+      });
+    }),
+    repositories.close(),
+  ]);
+
+  const failures = results.filter((result) => result.status === 'rejected');
+  if (failures.length > 0) {
+    console.error('Backend shutdown completed with errors:', failures);
+    process.exitCode = 1;
+  } else {
+    console.log('Backend stopped.');
+  }
+}
+
+process.once('SIGINT', () => void shutdown('SIGINT'));
+process.once('SIGTERM', () => void shutdown('SIGTERM'));
 
 httpServer.listen(env.BACKEND_PORT, () => {
   console.log(`Backend is running at http://localhost:${env.BACKEND_PORT}`);

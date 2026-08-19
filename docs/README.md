@@ -73,3 +73,56 @@ Mo `http://localhost:5173` de xem telemetry realtime, canh bao va lich su gan da
 - Firmware hien tai gui JSON cu; backend tu chuan hoa ba gia tri chuoi truoc khi parse.
 - Lich su telemetry co bo loc 1, 6 va 24 gio, kem thong ke min, max va trung binh.
 - Nhat ky su kien chi ghi khi trang thai thay doi: online/offline, khay nuoc, cam bien, loi he thong va xa da.
+
+## Lop truy cap du lieu
+
+Backend khong con truy cap SQL truc tiep tu `src/index.ts`. Ba nhom du lieu duoc tach thanh repository bat dong bo:
+
+| Repository | Du lieu |
+| --- | --- |
+| `TelemetryRepository` | Luu va truy van lich su do |
+| `CommandRepository` | Luu/cap nhat va doc nhat ky lenh |
+| `EventRepository` | Luu va doc nhat ky su kien |
+
+Backend hien dung PostgreSQL. SQLite adapter van duoc giu trong `backend/src/database/sqlite/` de quay lui khi can, nhung du lieu SQLite cu khong duoc import.
+
+Chay kiem tra sau khi thay doi database:
+
+```bash
+npm run test:unit
+npm run check
+npm run build
+```
+
+## PostgreSQL 18
+
+PostgreSQL la driver van hanh chinh. Lich su bat dau moi tu thoi diem chuyen doi; SQLite cu chi duoc luu tru.
+
+Bien moi trong `.env`:
+
+```dotenv
+DATABASE_DRIVER=postgres
+DATABASE_URL=postgresql://hut_am_app:password@localhost:5432/hut_am_mqtt
+DATABASE_POOL_MAX=10
+DATABASE_CONNECTION_TIMEOUT_MS=5000
+DATABASE_IDLE_TIMEOUT_MS=30000
+DATABASE_SSL=false
+```
+
+Sau khi database va user PostgreSQL da duoc tao:
+
+```bash
+npm run db:migrate
+npm run db:seed:current
+npm run db:smoke
+npm run db:verify
+```
+
+De chay integration test, dat `TEST_DATABASE_URL` tro den mot database kiem thu rieng roi chay:
+
+```bash
+npm run test:postgres
+npm run db:verify:test
+```
+
+Khong dung `db:migrate:down` tren database co du lieu that vi migration down se xoa cac bang ung dung.

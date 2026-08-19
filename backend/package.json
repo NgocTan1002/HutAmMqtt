@@ -7,13 +7,22 @@
     "dev": "npx --no-install tsx watch src/index.ts",
     "build": "npx --no-install tsc -p tsconfig.json",
     "start": "node dist/index.js",
-    "check": "npx --no-install tsc --noEmit -p tsconfig.json"
+    "check": "npx --no-install tsc --noEmit -p tsconfig.json",
+    "db:migrate": "npx --no-install tsx src/database/postgres/run-migrations.ts up",
+    "db:migrate:down": "npx --no-install tsx src/database/postgres/run-migrations.ts down",
+    "db:seed:current": "npx --no-install tsx src/database/postgres/seed-current-device.ts",
+    "db:smoke": "npx --no-install tsx src/database/postgres/smoke-postgres.ts",
+    "db:verify": "npx --no-install tsx src/database/postgres/verify-postgres.ts",
+    "db:verify:test": "npx --no-install tsx src/database/postgres/verify-postgres.ts test",
+    "test:postgres": "npx --no-install tsx --test src/database/postgres/postgres-repositories.integration.test.ts",
+    "test:unit": "npx --no-install tsx --test src/database/sampling/sample-telemetry.test.ts src/database/sqlite/sqlite-repositories.test.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
     "express": "^5.1.0",
     "mqtt": "^5.10.4",
+    "pg": "^8.23.0",
     "socket.io": "^4.8.1",
     "zod": "^3.24.2"
   },
@@ -21,6 +30,8 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.1",
     "@types/node": "^24.0.0",
+    "@types/pg": "^8.23.1",
+    "node-pg-migrate": "^9.0.0",
     "tsx": "^4.19.3",
     "typescript": "^5.8.3"
   }

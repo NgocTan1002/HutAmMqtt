@@ -522,6 +522,15 @@ Việc cần làm:
 - Dashboard, lịch sử, lệnh và sự kiện hoạt động như cũ.
 - `index.ts` không còn phụ thuộc vào câu SQL cụ thể.
 
+**Trạng thái ngày 19/08/2026: Đã hoàn thành.**
+
+- Đã tạo repository cho telemetry, command và event; toàn bộ hàm truy cập dữ liệu dùng `Promise`.
+- Đã cô lập `node:sqlite` và câu SQL trong `backend/src/database/sqlite/`.
+- Đã tách thuật toán lấy mẫu lịch sử ra khỏi adapter và kiểm thử giới hạn 240 điểm.
+- Đã bổ sung unit test cho cả ba repository, khởi tạo schema lặp lại và đóng kết nối an toàn.
+- Đã kiểm tra API thực tế với SQLite hiện có; số bản ghi sau refactor vẫn là telemetry `1939`, command `19`, event `8`.
+- Bản sao trước khi refactor nằm trong `backups/phase1-20260819-151147/`; file database backup được loại khỏi Git để tránh đưa dữ liệu vận hành vào repository.
+
 ### Giai đoạn 2 — PostgreSQL và migration schema
 
 **Thời gian dự kiến:** 1,5–2 ngày
@@ -544,37 +553,39 @@ Việc cần làm:
 - Migration có thể chạy lặp lại mà không phá dữ liệu.
 - `/api/health` phản ánh đúng trạng thái PostgreSQL.
 
-### Giai đoạn 3 — Chuyển dữ liệu SQLite sang PostgreSQL
+**Trạng thái ngày 19/08/2026: Đã hoàn thành và nghiệm thu.**
 
-**Thời gian dự kiến:** 1 ngày
+- Đã thêm driver PostgreSQL song song với SQLite, connection pool và graceful shutdown bất đồng bộ.
+- Đã tạo migration đầu tiên cho năm bảng cùng index, khóa ngoại và ràng buộc chính.
+- Đã tạo PostgreSQL adapter cho telemetry, command và event.
+- Đã đổi `/api/health` sang kiểm tra database thực tế.
+- Đã thêm integration test tự chạy migration hai lần và kiểm tra cả ba repository.
+- PostgreSQL 18 trên máy hoạt động tại `localhost:5432`; migration đã chạy thành công trên `hut_am_mqtt` và lần chạy lại không thay đổi schema.
+- Integration test trên `hut_am_mqtt_test` đã đạt; fixture được dọn sau kiểm thử.
+- Backend chạy thử bằng PostgreSQL báo database `connected`; khi MQTT kiểm thử bị ngắt, health chuyển đúng sang `degraded` mà API database vẫn hoạt động.
 
-Việc cần làm:
+### Giai đoạn 3 — Khởi tạo dữ liệu mới và chuyển sang PostgreSQL
 
-- Viết script import có thể chạy lại an toàn.
-- Tạo broker và device mặc định từ `.env` cũ.
-- Import telemetry.
-- Import command log.
-- Import event log.
-- Đối chiếu số lượng bản ghi.
-- Đối chiếu giá trị min/max thời gian và một số mẫu ngẫu nhiên.
-- Lưu báo cáo migration.
+**Thời gian thực tế:** dưới 0,5 ngày
 
-Quy trình chuyển chính thức:
+Theo quyết định ngày 19/08/2026, dữ liệu lịch sử SQLite không được import. PostgreSQL bắt đầu một tập dữ liệu mới; SQLite chỉ được giữ làm bản lưu cũ để tra cứu hoặc quay lui khi cần.
 
-1. Dừng backend.
-2. Copy SQLite sang thư mục backup có timestamp.
-3. Chạy migration PostgreSQL.
-4. Chạy script import.
-5. Đối chiếu dữ liệu.
-6. Chuyển `DATABASE_URL`.
-7. Khởi động backend.
-8. Kiểm tra dashboard và dữ liệu mới.
+Việc đã thực hiện:
 
-Điều kiện hoàn thành:
+- Tạo script seed idempotent từ cấu hình `.env` hiện tại.
+- Tạo một broker mặc định và thiết bị `mayhutam1` trong PostgreSQL.
+- Không import telemetry, command log hoặc event log từ SQLite.
+- Chuyển `DATABASE_DRIVER=postgres`.
+- Khởi động lại backend và kiểm tra MQTT/database health.
+- Chạy smoke test ghi/đọc telemetry, command và event bằng đúng thiết bị đã seed.
+- Xóa toàn bộ bản ghi smoke test sau khi kiểm tra.
 
-- Số bản ghi từng bảng khớp 100%.
-- Không sai `device_id` và thời gian.
-- Dữ liệu mới tiếp tục được ghi vào PostgreSQL.
+**Trạng thái ngày 19/08/2026: Đã hoàn thành.**
+
+- PostgreSQL có đúng một broker và một thiết bị, không tạo trùng khi chạy seed lần hai.
+- Health backend báo MQTT và database `connected`.
+- Thiết bị thật đang offline tại thời điểm nghiệm thu nên chưa phát sinh telemetry vận hành mới.
+- SQLite và backup giai đoạn 1 vẫn được giữ nguyên, nhưng không còn là database đang hoạt động.
 
 ### Giai đoạn 4 — Đa broker và đa thiết bị phía backend
 

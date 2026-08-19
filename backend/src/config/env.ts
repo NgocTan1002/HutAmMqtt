@@ -8,7 +8,16 @@ loadDotenv({ path: resolve(projectRoot, '.env') });
 
 const environmentSchema = z.object({
   BACKEND_PORT: z.coerce.number().int().positive().default(3001),
+  DATABASE_CONNECTION_TIMEOUT_MS: z.coerce.number().int().positive().default(5_000),
+  DATABASE_DRIVER: z.enum(['sqlite', 'postgres']).default('sqlite'),
+  DATABASE_IDLE_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),
   DATABASE_PATH: z.string().trim().min(1).default('data/nhiet-am-mqtt.db'),
+  DATABASE_POOL_MAX: z.coerce.number().int().positive().max(100).default(10),
+  DATABASE_SSL: z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
+  DATABASE_URL: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().trim().url().optional(),
+  ),
   DEVICE_ID: z.string().trim().min(1).default('mayhutam1'),
   DEVICE_OFFLINE_AFTER_SECONDS: z.coerce.number().int().positive().default(20),
   FRONTEND_PORT: z.coerce.number().int().positive().default(5173),
@@ -19,6 +28,14 @@ const environmentSchema = z.object({
   MQTT_TELEMETRY_TOPIC: z.string().trim().min(1).default('mayhutam1/nhan'),
   MQTT_USERNAME: z.string().optional(),
   MQTT_USE_TLS: z.enum(['true', 'false']).default('false').transform((value) => value === 'true'),
+}).superRefine((value, context) => {
+  if (value.DATABASE_DRIVER === 'postgres' && !value.DATABASE_URL) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['DATABASE_URL'],
+      message: 'DATABASE_URL is required when DATABASE_DRIVER=postgres.',
+    });
+  }
 });
 
 const parsedEnvironment = environmentSchema.safeParse(process.env);
