@@ -1,4 +1,5 @@
 import type { CommandRecord } from '../commands/command-service.js';
+import type { DeviceConfig, MqttConnectionConfig } from '../configuration/configuration-types.js';
 import type { EventRecord } from '../events/event-service.js';
 import type { Telemetry } from '../mqtt/telemetry-schema.js';
 import type { TelemetryHistoryPoint } from './database-types.js';
@@ -18,10 +19,22 @@ export interface EventRepository {
   getHistory(deviceId: string, limit: number): Promise<EventRecord[]>;
 }
 
+export interface MqttConnectionRepository {
+  getEnabled(): Promise<MqttConnectionConfig[]>;
+  getById(id: string): Promise<MqttConnectionConfig | null>;
+}
+
+export interface DeviceRepository {
+  getEnabled(): Promise<DeviceConfig[]>;
+  getById(id: string): Promise<DeviceConfig | null>;
+}
+
 export type Repositories = {
   telemetry: TelemetryRepository;
   commands: CommandRepository;
   events: EventRepository;
+  mqttConnections: MqttConnectionRepository;
+  devices: DeviceRepository;
   checkHealth(): Promise<boolean>;
   close(): Promise<void>;
 };

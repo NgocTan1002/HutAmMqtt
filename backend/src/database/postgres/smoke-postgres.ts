@@ -22,6 +22,15 @@ const commandId = randomUUID();
 const eventId = randomUUID();
 
 try {
+  const deviceConfig = await repositories.devices.getById(env.DEVICE_ID);
+  if (!deviceConfig || !deviceConfig.enabled) {
+    throw new Error(`Enabled PostgreSQL device configuration not found: ${env.DEVICE_ID}`);
+  }
+  const connectionConfig = await repositories.mqttConnections.getById(deviceConfig.mqttConnectionId);
+  if (!connectionConfig || !connectionConfig.enabled) {
+    throw new Error(`Enabled PostgreSQL MQTT connection not found: ${deviceConfig.mqttConnectionId}`);
+  }
+
   const telemetry: Telemetry = {
     deviceId: env.DEVICE_ID,
     temperature: 27.1,
@@ -67,7 +76,7 @@ try {
     throw new Error('PostgreSQL event smoke record was not returned.');
   }
 
-  console.log('PostgreSQL smoke test passed for telemetry, command and event repositories.');
+  console.log('PostgreSQL smoke test passed for configuration, telemetry, command and event repositories.');
 } finally {
   await cleanupPool.query('DELETE FROM event_logs WHERE id = $1', [eventId]);
   await cleanupPool.query('DELETE FROM command_logs WHERE id = $1', [commandId]);

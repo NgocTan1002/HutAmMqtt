@@ -117,6 +117,10 @@ test('SQLite schema initialization is idempotent and close is safe to repeat', a
 
   const second = createSqliteRepositories(temporary.databasePath);
   assert.deepEqual(await second.commands.getHistory('device-1', 20), []);
+  assert.deepEqual(await second.mqttConnections.getEnabled(), []);
+  assert.deepEqual(await second.devices.getEnabled(), []);
+  assert.equal(await second.mqttConnections.getById('connection-1'), null);
+  assert.equal(await second.devices.getById('device-1'), null);
   second.close();
   rmSync(temporary.directory, { recursive: true, force: true });
 });

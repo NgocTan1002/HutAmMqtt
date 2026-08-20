@@ -56,9 +56,10 @@ test('PostgreSQL migration and repositories work together', { skip: !databaseUrl
   });
 
   await setupPool.query(
-    `INSERT INTO mqtt_connections (id, name, broker_url, port)
-     VALUES ($1, $2, $3, $4)`,
-    [connectionId, 'Phase 2 integration broker', 'mqtt://localhost', 1883],
+    `INSERT INTO mqtt_connections (
+      id, name, broker_url, port, use_tls, username, encrypted_password, client_id_prefix
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [connectionId, 'Phase 2 integration broker', 'mqtt://localhost', 1883, false, 'tester', 'encrypted', 'phase2'],
   );
   await setupPool.query(
     `INSERT INTO devices (
@@ -66,6 +67,33 @@ test('PostgreSQL migration and repositories work together', { skip: !databaseUrl
     ) VALUES ($1, $2, $3, $4, $5, $6)`,
     [deviceId, 'Phase 2 integration device', connectionId, `${deviceId}/nhan`, `${deviceId}/caidat`, `${deviceId}/nhan`],
   );
+
+  assert.deepEqual(await repositories.mqttConnections.getById(connectionId), {
+    id: connectionId,
+    name: 'Phase 2 integration broker',
+    brokerUrl: 'mqtt://localhost',
+    port: 1883,
+    useTls: false,
+    username: 'tester',
+    encryptedPassword: 'encrypted',
+    clientIdPrefix: 'phase2',
+    enabled: true,
+  });
+  assert.ok((await repositories.mqttConnections.getEnabled()).some((row) => row.id === connectionId));
+  assert.equal(await repositories.mqttConnections.getById(randomUUID()), null);
+
+  assert.deepEqual(await repositories.devices.getById(deviceId), {
+    id: deviceId,
+    name: 'Phase 2 integration device',
+    mqttConnectionId: connectionId,
+    telemetryTopic: `${deviceId}/nhan`,
+    commandTopic: `${deviceId}/caidat`,
+    responseTopic: `${deviceId}/nhan`,
+    offlineAfterSeconds: 20,
+    enabled: true,
+  });
+  assert.ok((await repositories.devices.getEnabled()).some((row) => row.id === deviceId));
+  assert.equal(await repositories.devices.getById(`missing-${randomUUID()}`), null);
 
   const receivedAt = new Date().toISOString();
   const telemetry: Telemetry = {
@@ -118,4 +146,12 @@ test('PostgreSQL migration and repositories work together', { skip: !databaseUrl
   assert.equal(events.length, 1);
   assert.equal(events[0].id, event.id);
   assert.equal(await repositories.checkHealth(), true);
+
+  await setupPool.query('UPDATE devices SET enabled = FALSE WHERE id = $1', [deviceId]);
+  assert.ok(!(await repositories.devices.getEnabled()).some((row) => row.id === deviceId));
+  assert.equal((await repositories.devices.getById(deviceId))?.enabled, false);
+
+  await setupPool.query('UPDATE mqtt_connections SET enabled = FALSE WHERE id = $1', [connectionId]);
+  assert.ok(!(await repositories.mqttConnections.getEnabled()).some((row) => row.id === connectionId));
+  assert.equal((await repositories.mqttConnections.getById(connectionId))?.enabled, false);
 });
