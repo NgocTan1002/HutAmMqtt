@@ -41,4 +41,25 @@ export class PostgresEventRepository implements EventRepository {
 
     return result.rows.map((row) => ({ ...row, createdAt: toIsoString(row.createdAt) }));
   }
+
+  public async getRange(deviceId: string, from: string, to: string, limit: number): Promise<EventRecord[]> {
+    const result = await this.pool.query<EventHistoryRow>(
+      `SELECT
+        id,
+        device_id AS "deviceId",
+        type,
+        severity,
+        message,
+        created_at AS "createdAt"
+      FROM event_logs
+      WHERE device_id = $1
+        AND created_at >= $2::timestamptz
+        AND created_at <= $3::timestamptz
+      ORDER BY created_at ASC
+      LIMIT $4`,
+      [deviceId, from, to, limit],
+    );
+
+    return result.rows.map((row) => ({ ...row, createdAt: toIsoString(row.createdAt) }));
+  }
 }

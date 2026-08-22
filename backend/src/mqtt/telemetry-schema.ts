@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 const finiteNumber = z.number().finite();
+const binaryStatus = z.union([z.literal(0), z.literal(1)]);
 
 const rawTelemetrySchema = z.object({
   Tdo: finiteNumber,
@@ -12,7 +13,12 @@ const rawTelemetrySchema = z.object({
   'Running Mode': z.string().trim().min(1),
   'Water Tank Status': z.string().trim().min(1),
   'Sensor Error': z.number().int(),
+  'Loc Status': binaryStatus.optional(),
+  'Fan Status': binaryStatus.optional(),
+  'Heater Status': binaryStatus.optional(),
 });
+
+export type BinaryStatus = 0 | 1 | null;
 
 export type Telemetry = {
   deviceId: string;
@@ -23,6 +29,9 @@ export type Telemetry = {
   runningMode: string;
   runningStatus: string;
   sensorError: number;
+  filterStatus: BinaryStatus;
+  fanStatus: BinaryStatus;
+  heaterStatus: BinaryStatus;
   temperature: number;
   temperatureSetpoint: number;
   waterTankStatus: string;
@@ -79,6 +88,9 @@ export function parseTelemetry(payload: Buffer, deviceId: string, receivedAt = n
     runningMode: runningMode === 'CONTINUE' ? 'CONTINUOUS' : runningMode,
     waterTankStatus: rawTelemetry['Water Tank Status'].toUpperCase(),
     sensorError: rawTelemetry['Sensor Error'],
+    filterStatus: rawTelemetry['Loc Status'] ?? null,
+    fanStatus: rawTelemetry['Fan Status'] ?? null,
+    heaterStatus: rawTelemetry['Heater Status'] ?? null,
     receivedAt: receivedAt.toISOString(),
   };
 }

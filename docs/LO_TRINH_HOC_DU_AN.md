@@ -110,8 +110,12 @@ Telemetry và phản hồi đang dùng chung topic. Backend phân loại bằng 
 | `Running Mode` | `runningMode` | `SMART`, `CONTINUE` hoặc `CONTINUOUS` |
 | `Water Tank Status` | `waterTankStatus` | `OK` hoặc `FULL` |
 | `Sensor Error` | `sensorError` | `0` là bình thường, khác `0` là lỗi |
+| `Loc Status` | `filterStatus` | `0` là dừng, `1` là chạy |
+| `Fan Status` | `fanStatus` | `0` là dừng, `1` là chạy |
+| `Heater Status` | `heaterStatus` | `0` là dừng, `1` là chạy |
 
 Firmware cũ có thể gửi các giá trị chuỗi mà không có dấu nháy kép. Backend hiện dùng regex để chuẩn hóa trước khi gọi `JSON.parse`, sau đó dùng Zod kiểm tra cấu trúc.
+Ba trạng thái bộ phận được lưu dạng số nhị phân. Bản ghi cũ chưa có các trường này giữ giá trị `NULL` và giao diện hiển thị “Chưa có dữ liệu”.
 
 ### 5.3. Lệnh điều khiển
 
@@ -138,6 +142,7 @@ Trong đó:
 | GET | `/api/devices/:deviceId/telemetry?hours=1\|6\|24` | Lịch sử telemetry |
 | GET | `/api/devices/:deviceId/commands` | 20 lệnh gần nhất |
 | GET | `/api/devices/:deviceId/events` | 30 sự kiện gần nhất |
+| GET | `/api/devices/:deviceId/export/excel` | Xuất báo cáo và dữ liệu đầy đủ ra Excel |
 | POST | `/api/devices/:deviceId/commands` | Gửi bộ thông số mới |
 | Socket.IO | `system:ready` | Trạng thái khi client vừa kết nối |
 | Socket.IO | `telemetry:update` | Telemetry mới |

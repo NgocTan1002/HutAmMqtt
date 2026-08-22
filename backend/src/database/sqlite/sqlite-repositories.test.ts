@@ -25,6 +25,9 @@ function telemetry(deviceId: string, index: number): Telemetry {
     runningMode: 'SMART',
     waterTankStatus: 'OK',
     sensorError: 0,
+    filterStatus: index % 2 === 0 ? 0 : 1,
+    fanStatus: index % 2 === 0 ? 1 : 0,
+    heaterStatus: index % 2 === 0 ? 0 : 1,
     receivedAt: new Date(Date.now() - (3 - index) * 1_000).toISOString(),
   };
 }
@@ -44,7 +47,17 @@ test('SQLite repositories persist and query telemetry by device', async (context
   const history = await repositories.telemetry.getRange('device-1', 1);
   assert.equal(history.length, 2);
   assert.deepEqual(history.map((row) => row.temperature), [25, 27]);
+  assert.deepEqual(history.map((row) => row.filterStatus), [0, 0]);
+  assert.deepEqual(history.map((row) => row.fanStatus), [1, 1]);
+  assert.deepEqual(history.map((row) => row.heaterStatus), [0, 0]);
   assert.ok(history[0].receivedAt < history[1].receivedAt);
+  const exported = await repositories.telemetry.getExportRange(
+    'device-1',
+    new Date(Date.now() - 60_000).toISOString(),
+    new Date(Date.now() + 60_000).toISOString(),
+    10,
+  );
+  assert.equal(exported.length, 2);
 });
 
 test('SQLite command repository updates an existing command instead of duplicating it', async (context) => {
@@ -75,6 +88,12 @@ test('SQLite command repository updates an existing command instead of duplicati
   assert.equal(commands[0].status, 'success');
   assert.equal(commands[0].response, 'Đã xác nhận qua telemetry.');
   assert.ok(commands[0].completedAt);
+  assert.equal((await repositories.commands.getRange(
+    'device-1',
+    new Date(Date.now() - 60_000).toISOString(),
+    new Date(Date.now() + 60_000).toISOString(),
+    10,
+  )).length, 1);
 });
 
 test('SQLite event repository returns typed events in newest-first order', async (context) => {
@@ -107,6 +126,12 @@ test('SQLite event repository returns typed events in newest-first order', async
   const events = await repositories.events.getHistory('device-1', 30);
   assert.deepEqual(events.map((event) => event.id), ['event-2', 'event-1']);
   assert.equal(events[0].severity, 'info');
+  assert.equal((await repositories.events.getRange(
+    'device-1',
+    new Date(Date.now() - 60_000).toISOString(),
+    new Date(Date.now() + 60_000).toISOString(),
+    10,
+  )).length, 2);
 });
 
 test('SQLite schema initialization is idempotent and close is safe to repeat', async () => {

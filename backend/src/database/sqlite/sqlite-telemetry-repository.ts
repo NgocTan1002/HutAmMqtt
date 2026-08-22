@@ -12,8 +12,8 @@ export class SqliteTelemetryRepository implements TelemetryRepository {
       INSERT INTO telemetry (
         device_id, temperature, humidity, coil_temperature, humidity_setpoint,
         temperature_setpoint, running_status, running_mode, water_tank_status,
-        sensor_error, received_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        sensor_error, filter_status, fan_status, heater_status, received_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
   }
 
@@ -29,6 +29,9 @@ export class SqliteTelemetryRepository implements TelemetryRepository {
       telemetry.runningMode,
       telemetry.waterTankStatus,
       telemetry.sensorError,
+      telemetry.filterStatus,
+      telemetry.fanStatus,
+      telemetry.heaterStatus,
       telemetry.receivedAt,
     );
   }
@@ -46,6 +49,9 @@ export class SqliteTelemetryRepository implements TelemetryRepository {
         running_mode AS runningMode,
         water_tank_status AS waterTankStatus,
         sensor_error AS sensorError,
+        filter_status AS filterStatus,
+        fan_status AS fanStatus,
+        heater_status AS heaterStatus,
         received_at AS receivedAt
       FROM telemetry
       WHERE device_id = ? AND received_at >= ?
@@ -53,5 +59,28 @@ export class SqliteTelemetryRepository implements TelemetryRepository {
     `).all(deviceId, since) as unknown as TelemetryHistoryPoint[];
 
     return sampleTelemetry(rows, maxPoints);
+  }
+
+  public async getExportRange(deviceId: string, from: string, to: string, limit: number): Promise<TelemetryHistoryPoint[]> {
+    return this.database.prepare(`
+      SELECT
+        temperature,
+        humidity,
+        coil_temperature AS coilTemperature,
+        humidity_setpoint AS humiditySetpoint,
+        temperature_setpoint AS temperatureSetpoint,
+        running_status AS runningStatus,
+        running_mode AS runningMode,
+        water_tank_status AS waterTankStatus,
+        sensor_error AS sensorError,
+        filter_status AS filterStatus,
+        fan_status AS fanStatus,
+        heater_status AS heaterStatus,
+        received_at AS receivedAt
+      FROM telemetry
+      WHERE device_id = ? AND received_at >= ? AND received_at <= ?
+      ORDER BY received_at ASC
+      LIMIT ?
+    `).all(deviceId, from, to, limit) as unknown as TelemetryHistoryPoint[];
   }
 }

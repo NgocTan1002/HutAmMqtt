@@ -32,6 +32,7 @@ export function buildSettingsCommand(settings: DeviceSettings): string {
 }
 
 export class CommandService {
+  private closed = false;
   private pending: CommandRecord | null = null;
   private timeout: NodeJS.Timeout | null = null;
   private expectedSettings: DeviceSettings | null = null;
@@ -43,6 +44,9 @@ export class CommandService {
   }
 
   public async sendSettings(settings: DeviceSettings): Promise<CommandRecord> {
+    if (this.closed) {
+      throw new Error('Dịch vụ điều khiển của thiết bị đã dừng.');
+    }
     if (this.pending) {
       throw new Error('Thiết bị đang có một lệnh chờ phản hồi.');
     }
@@ -56,6 +60,9 @@ export class CommandService {
     };
 
     await this.options.publish(command.mqttPayload);
+    if (this.closed) {
+      throw new Error('Dịch vụ điều khiển của thiết bị đã dừng.');
+    }
     this.pending = command;
     this.expectedSettings = settings;
     this.options.onUpdate(command);
@@ -99,6 +106,18 @@ export class CommandService {
     if (humidityMatches && temperatureMatches && modeMatches) {
       this.complete('success', 'Đã xác nhận thông số mới qua telemetry.');
     }
+  }
+
+  public shutdown(response = 'Runtime của thiết bị đã dừng.'): void {
+    if (this.closed) return;
+    this.closed = true;
+    if (this.pending) {
+      this.complete('error', response);
+      return;
+    }
+    if (this.timeout) clearTimeout(this.timeout);
+    this.timeout = null;
+    this.expectedSettings = null;
   }
 
   private complete(status: Exclude<CommandStatus, 'pending'>, response: string): void {

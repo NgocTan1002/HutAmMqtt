@@ -42,6 +42,9 @@ try {
     runningMode: 'SMART',
     waterTankStatus: 'OK',
     sensorError: 0,
+    filterStatus: 0,
+    fanStatus: 1,
+    heaterStatus: 0,
     receivedAt,
   };
   await repositories.telemetry.save(telemetry);

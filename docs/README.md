@@ -9,8 +9,9 @@ Project chua dung Docker. Cac gia tri MQTT duoc dat trong file `.env` tai thu mu
 1. File `.env` mau da duoc tao tai thu muc goc project. Neu bi xoa, sao chep `.env.example` thanh `.env`.
 2. Mo MQTTX va ket noi broker hien dang dung cho thiet bi.
 3. Cap nhat `MQTT_BROKER_URL`, `MQTT_USE_TLS`, `MQTT_USERNAME` va `MQTT_PASSWORD` trong `.env` neu broker khac cau hinh mac dinh.
-4. Subscribe topic `mayhutam1/nhan` trong MQTTX.
-5. Xac nhan thiet bi gui JSON telemetry dinh ky khoang 5 giay mot lan.
+4. Chay `npm run credentials:setup --workspace=backend` mot lan de tao khoa cuc bo va ma hoa password MQTT trong PostgreSQL. Khong lam mat `CONFIG_ENCRYPTION_KEY`, vi password da ma hoa se khong the khoi phuc neu mat khoa.
+5. Subscribe topic `mayhutam1/nhan` trong MQTTX.
+6. Xac nhan thiet bi gui JSON telemetry dinh ky khoang 5 giay mot lan.
 
 Topic giu theo giao thuc hien tai:
 
@@ -52,7 +53,7 @@ Backend subscribe `MQTT_TELEMETRY_TOPIC` (mac dinh `mayhutam1/nhan`) va phat tel
 
 - Trang thai hien tai: `GET http://localhost:3001/api/devices/mayhutam1/state`
 - Suc khoe backend/MQTT: `GET http://localhost:3001/api/health`
-- Chua co ket noi database va chua publish lenh dieu khien.
+- Backend luu du lieu vao PostgreSQL va co the publish lenh dieu khien theo tung thiet bi.
 
 Cap nhat `MQTT_BROKER_URL` trong `.env` bang gia tri connection tu MQTTX truoc khi chay `npm run dev:backend`.
 
@@ -126,3 +127,30 @@ npm run db:verify:test
 ```
 
 Khong dung `db:migrate:down` tren database co du lieu that vi migration down se xoa cac bang ung dung.
+
+## API cau hinh MQTT va thiet bi
+
+Backend doc va cap nhat cau hinh trong PostgreSQL. Sau moi thay doi API, runtime MQTT duoc dong bo ngay ma khong can restart backend.
+
+| Method | Endpoint | Chuc nang |
+| --- | --- | --- |
+| `GET/POST` | `/api/mqtt-connections` | Liet ke hoac tao broker |
+| `GET/PATCH/DELETE` | `/api/mqtt-connections/:id` | Doc, sua hoac xoa broker |
+| `POST` | `/api/mqtt-connections/test` | Thu ket noi truoc khi luu |
+| `POST` | `/api/mqtt-connections/:id/test` | Thu broker da luu |
+| `POST` | `/api/mqtt-connections/:id/reconnect` | Ket noi lai mot broker |
+| `GET/POST` | `/api/devices` | Liet ke hoac tao thiet bi |
+| `GET` | `/api/devices/:id/config` | Doc cau hinh thiet bi |
+| `PATCH/DELETE` | `/api/devices/:id` | Sua hoac xoa thiet bi |
+
+Password MQTT duoc ma hoa AES-256-GCM. API chi tra `hasPassword`, khong tra password ro hoac ciphertext. Thiet bi da co telemetry/command/event khong duoc xoa cung; dat `enabled=false` de giu lich su.
+
+## Giao dien quan ly nhieu thiet bi
+
+Sau khi chay `npm run dev`, giao dien tai `http://localhost:5173` co ba khu vuc:
+
+- `Tong quan`: chon thiet bi, xem realtime/lich su va gui cai dat dung thiet bi dang chon.
+- `Ket noi MQTT`: them, sua, test, reconnect, bat/tat hoac xoa broker.
+- `Thiet bi`: them, sua, gan broker, khai bao topic va bat/tat thiet bi.
+
+Lua chon thiet bi duoc ghi nho tren trinh duyet. Socket.IO chi cap nhat dashboard khi `deviceId` cua ban tin trung voi thiet bi dang xem, tranh tron du lieu giua cac may.

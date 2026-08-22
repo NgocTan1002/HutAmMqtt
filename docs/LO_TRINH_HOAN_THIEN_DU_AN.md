@@ -242,6 +242,9 @@ CREATE TABLE telemetry (
   running_mode VARCHAR(50) NOT NULL,
   water_tank_status VARCHAR(50) NOT NULL,
   sensor_error INTEGER NOT NULL,
+  filter_status SMALLINT CHECK (filter_status IN (0, 1)),
+  fan_status SMALLINT CHECK (fan_status IN (0, 1)),
+  heater_status SMALLINT CHECK (heater_status IN (0, 1)),
   received_at TIMESTAMPTZ NOT NULL
 );
 
@@ -419,17 +422,18 @@ Khi nhận message, backend phải xác định đúng broker, topic, thiết b�
 
 ## 10. Giao diện cấu hình trên website
 
-### 10.1. Trang “Kết nối MQTT”
+### 10.1. Kết nối MQTT dùng chung tại trang “Thiết bị”
 
-Danh sách hiển thị:
+Do hệ thống chỉ vận hành tại một địa điểm, giao diện sử dụng một broker dùng chung thay vì một trang quản lý nhiều broker. Backend vẫn giữ cấu trúc kết nối độc lập để không phải thay đổi dữ liệu và vẫn bảo đảm các thiết bị dùng chung một MQTT client.
+
+Phần tóm tắt hiển thị:
 
 - Tên broker.
 - Host và port.
 - TLS bật/tắt.
 - Trạng thái runtime.
-- Số thiết bị đang sử dụng.
-- Thời điểm kết nối/lỗi gần nhất.
-- Các thao tác: kiểm tra, sửa, kết nối lại, bật/tắt.
+- Xác thực đang sử dụng.
+- Các thao tác: kiểm tra, sửa và kết nối lại.
 
 Form cấu hình:
 
@@ -458,16 +462,14 @@ Danh sách hiển thị:
 
 - Tên thiết bị.
 - Device ID.
-- Broker đang sử dụng.
 - Trạng thái online/offline.
-- Telemetry topic.
+- Telemetry, command và response topic.
 - Thời gian nhận dữ liệu cuối.
 
 Form thiết bị:
 
 - Tên hiển thị.
 - Device ID.
-- Broker.
 - Telemetry topic.
 - Command topic.
 - Response topic.
@@ -481,6 +483,14 @@ Form thiết bị:
 - Tất cả lịch sử, lệnh và sự kiện đi theo thiết bị được chọn.
 - Socket.IO chỉ cập nhật dashboard nếu `deviceId` khớp.
 - Có thể dùng Socket.IO room `device:<deviceId>` để giảm dữ liệu truyền.
+
+### 10.4. Xuất dữ liệu Excel
+
+- Dashboard có form chọn thời điểm bắt đầu và kết thúc, mặc định 24 giờ gần nhất.
+- File Excel gồm sheet tổng hợp, dữ liệu đo và tùy chọn kèm lệnh điều khiển, sự kiện.
+- Dữ liệu xuất được truy vấn đầy đủ theo thời gian, không sử dụng danh sách đã lấy mẫu cho biểu đồ.
+- Mỗi lần xuất tối đa 31 ngày, 200.000 bản ghi telemetry và 20.000 bản ghi cho mỗi loại nhật ký.
+- File được tạo theo yêu cầu và trả trực tiếp về trình duyệt, không lưu file tạm trên server.
 
 ## 11. Lộ trình thực hiện
 
@@ -591,19 +601,30 @@ Việc đã thực hiện:
 
 **Thời gian dự kiến:** 3 ngày
 
+**Tiến độ ngày 21/08/2026:**
+
+- Bước 1 hoàn thành: đã có kiểu cấu hình broker và thiết bị.
+- Bước 2 hoàn thành: PostgreSQL repository đọc cấu hình enabled hoặc theo ID.
+- Bước 3 hoàn thành: `TopicRouter` định tuyến theo `connectionId + topic`, kiểm tra xung đột và cô lập payload/lỗi handler không hợp lệ.
+- Bước 4 hoàn thành: `DeviceRuntime` cô lập trạng thái, lệnh và sự kiện theo từng thiết bị; `DeviceRegistry` quản lý vòng đời nhiều runtime và nhóm thiết bị theo broker.
+- Bước 5 hoàn thành: `MqttConnectionManager` quản lý nhiều MQTT client độc lập, subscribe/publish đúng broker và tự tạo lại riêng broker có cấu hình thay đổi.
+- Bước 6 hoàn thành: `RuntimeCoordinator` nạp cấu hình PostgreSQL khi khởi động và đồng bộ nóng theo chu kỳ 5 giây.
+- Bước 7 hoàn thành: backend API và Socket.IO đã dùng runtime theo `deviceId`, sự kiện realtime có thêm `connectionId`, health check trả trạng thái riêng của từng broker.
+- Bước 8 hoàn thành: shutdown dừng toàn bộ device runtime và MQTT client; bộ kiểm thử xác nhận hai broker và nhiều thiết bị hoạt động độc lập.
+
 Việc cần làm:
 
-- Tạo `MqttConnectionManager`.
-- Tạo `DeviceRegistry`.
-- Tạo `TopicRouter`.
-- Khởi tạo runtime từ cấu hình PostgreSQL.
-- Subscribe tất cả topic đang bật.
-- Thêm/sửa/xóa thiết bị ở runtime mà không cần restart backend.
-- Kết nối lại broker khi cấu hình thay đổi.
-- Tách trạng thái broker khỏi trạng thái thiết bị.
-- Tạo một `CommandService` cho mỗi thiết bị.
-- Phát Socket.IO event có `deviceId` và `connectionId` phù hợp.
-- Xử lý shutdown tất cả MQTT client.
+- [x] Tạo `MqttConnectionManager`.
+- [x] Tạo `DeviceRegistry`.
+- [x] Tạo `TopicRouter`.
+- [x] Khởi tạo runtime từ cấu hình PostgreSQL.
+- [x] Subscribe tất cả topic đang bật.
+- [x] Thêm/sửa/xóa thiết bị ở runtime mà không cần restart backend.
+- [x] Kết nối lại broker khi cấu hình thay đổi.
+- [x] Tách trạng thái broker khỏi trạng thái thiết bị.
+- [x] Tạo một `CommandService` cho mỗi thiết bị.
+- [x] Phát Socket.IO event có `deviceId` và `connectionId` phù hợp.
+- [x] Xử lý shutdown tất cả MQTT client.
 
 Điều kiện hoàn thành:
 
@@ -613,22 +634,39 @@ Việc cần làm:
 - Hai thiết bị có thể cùng có lệnh pending.
 - Message không bị chuyển nhầm thiết bị.
 
+**Trạng thái ngày 21/08/2026: Đã hoàn thành bằng kiểm thử tự động.**
+
+- 34 unit test xác nhận định tuyến, runtime thiết bị, hai broker độc lập và đồng bộ cấu hình nóng.
+- PostgreSQL integration test và smoke test đều đạt.
+- Việc nghiệm thu với hai thiết bị vật lý hoặc hai phiên MQTTX vẫn thuộc giai đoạn 8.
+
 ### Giai đoạn 5 — API quản lý cấu hình
 
 **Thời gian dự kiến:** 1,5–2 ngày
 
+**Tiến độ ngày 21/08/2026:**
+
+- Bước 1 hoàn thành: mật khẩu MQTT được mã hóa bằng AES-256-GCM với IV ngẫu nhiên và authentication tag.
+- Khóa 32 byte được lưu riêng trong `.env` qua `CONFIG_ENCRYPTION_KEY`; công cụ `credentials:setup` không in khóa hoặc mật khẩu ra log.
+- MQTT manager chỉ giải mã credential ngay trước khi tạo client và không đưa plaintext/ciphertext vào health hoặc Socket.IO.
+- Script seed đã mã hóa password trước khi lưu PostgreSQL; dữ liệu plaintext cũ có thể chuyển đổi bằng transaction.
+- Bước 2 hoàn thành: PostgreSQL repository hỗ trợ CRUD broker/thiết bị, đếm thiết bị phụ thuộc và kiểm tra dữ liệu lịch sử.
+- Bước 3 hoàn thành: `ConfigurationService` chuẩn hóa URL, mã hóa password, kiểm tra broker và phát hiện xung đột topic.
+- Bước 4 hoàn thành: API CRUD broker, test connection, reconnect, CRUD thiết bị và đồng bộ runtime tức thời.
+- Bước 5 hoàn thành: response không chứa password/ciphertext; lỗi API có `code`, `message` và `details` thống nhất.
+
 Việc cần làm:
 
-- API CRUD MQTT connection.
-- API test connection.
-- API reconnect.
-- API CRUD thiết bị.
-- Kiểm tra trùng topic.
-- Chặn xóa broker có thiết bị phụ thuộc.
-- Mã hóa password bằng AES-GCM.
-- Mask password trong response.
-- Không ghi password vào log.
-- Kiểm tra host, port và protocol hợp lệ.
+- [x] API CRUD MQTT connection.
+- [x] API test connection.
+- [x] API reconnect.
+- [x] API CRUD thiết bị.
+- [x] Kiểm tra trùng topic.
+- [x] Chặn xóa broker có thiết bị phụ thuộc.
+- [x] Mã hóa password bằng AES-GCM.
+- [x] Mask password trong response.
+- [x] Không ghi password vào log.
+- [x] Kiểm tra host, port và protocol hợp lệ.
 
 Điều kiện hoàn thành:
 
@@ -637,22 +675,37 @@ Việc cần làm:
 - Test connection trả đúng thành công/thất bại.
 - Password không xuất hiện trong API response và log.
 
+**Trạng thái ngày 21/08/2026: Đã hoàn thành.**
+
+- 45 unit test và PostgreSQL integration test đều đạt.
+- HTTP smoke test xác nhận create/update/delete, test connection, reconnect và runtime refresh hoạt động.
+- API trả `409 TOPIC_CONFLICT` khi topic trùng và `409 BROKER_IN_USE` khi xóa broker còn thiết bị.
+- Bản ghi broker/thiết bị tạm dùng để kiểm thử đã được xóa sau nghiệm thu.
+
 ### Giai đoạn 6 — Giao diện cấu hình và dashboard nhiều thiết bị
 
 **Thời gian dự kiến:** 2,5–3 ngày
 
+**Tiến độ ngày 21/08/2026:**
+
+- Dashboard, API client, hook realtime và component dùng chung đã được tách khỏi `App.tsx`.
+- Sidebar có hai màn hình: Tổng quan và Thiết bị; không sử dụng icon trang trí.
+- Dashboard có bộ chọn thiết bị, ghi nhớ lựa chọn cục bộ và lọc mọi Socket.IO event theo `deviceId`.
+- Form broker dùng chung nằm đầu trang Thiết bị, hỗ trợ tạo/sửa, test, reconnect, bật/tắt, giữ hoặc xóa password; API không trả password về giao diện.
+- Form thiết bị hỗ trợ tạo/sửa, tự gán broker dùng chung, gợi ý topic theo ID, bật/tắt và hiển thị lỗi xung đột từ backend.
+
 Việc cần làm:
 
-- Tách `App.tsx` thành pages/components/hooks.
-- Thêm trang MQTT connections.
-- Thêm form test, thêm và sửa connection.
-- Thêm trang danh sách thiết bị.
-- Thêm form thiết bị.
-- Thêm bộ chọn thiết bị trên dashboard.
-- Thay toàn bộ `mayhutam1` ghi cứng bằng thiết bị được chọn.
-- Cập nhật Socket.IO theo thiết bị.
-- Thêm trạng thái loading, empty và error.
-- Giữ phong cách giao diện công nghiệp tối giản hiện tại.
+- [x] Tách `App.tsx` thành pages/components/hooks.
+- [x] Thêm cấu hình MQTT dùng chung vào trang Thiết bị.
+- [x] Thêm form test, tạo và sửa kết nối dùng chung.
+- [x] Thêm trang danh sách thiết bị.
+- [x] Thêm form thiết bị.
+- [x] Thêm bộ chọn thiết bị trên dashboard.
+- [x] Thay toàn bộ `mayhutam1` ghi cứng bằng thiết bị được chọn.
+- [x] Cập nhật Socket.IO theo thiết bị.
+- [x] Thêm trạng thái loading, empty và error.
+- [x] Giữ phong cách giao diện công nghiệp tối giản hiện tại.
 
 Điều kiện hoàn thành:
 
@@ -660,6 +713,13 @@ Việc cần làm:
 - Chuyển thiết bị không cần tải lại toàn trang.
 - Dashboard không trộn dữ liệu giữa các thiết bị.
 - Cài đặt gửi đúng thiết bị đang chọn.
+
+**Trạng thái ngày 21/08/2026: Đã hoàn thành.**
+
+- TypeScript frontend/backend và production build đều đạt.
+- Trang dev phản hồi HTTP 200 và đọc đúng danh sách broker/thiết bị từ backend thật.
+- Không còn chuỗi `mayhutam1` ghi cứng trong mã nguồn frontend.
+- Kiểm tra trực quan đa kích thước màn hình điện thoại chưa thực hiện vì phạm vi hiện tại ưu tiên desktop.
 
 ### Giai đoạn 7 — Độ ổn định và quan sát vận hành
 

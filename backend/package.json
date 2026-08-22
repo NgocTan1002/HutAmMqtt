@@ -14,12 +14,14 @@
     "db:smoke": "npx --no-install tsx src/database/postgres/smoke-postgres.ts",
     "db:verify": "npx --no-install tsx src/database/postgres/verify-postgres.ts",
     "db:verify:test": "npx --no-install tsx src/database/postgres/verify-postgres.ts test",
+    "credentials:setup": "npx --no-install tsx src/security/setup-credentials.ts",
     "test:postgres": "npx --no-install tsx --test src/database/postgres/postgres-repositories.integration.test.ts",
-    "test:unit": "npx --no-install tsx --test src/database/sampling/sample-telemetry.test.ts src/database/sqlite/sqlite-repositories.test.ts"
+    "test:unit": "npx --no-install tsx --test src/database/sampling/sample-telemetry.test.ts src/database/sqlite/sqlite-repositories.test.ts src/security/credential-cipher.test.ts src/mqtt/topic-router.test.ts src/mqtt/mqtt-connection-manager.test.ts src/devices/device-runtime.test.ts src/devices/device-registry.test.ts src/devices/runtime-coordinator.test.ts src/configuration/configuration-service.test.ts src/export/excel-export.test.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.6.1",
+    "exceljs": "^4.4.0",
     "express": "^5.1.0",
     "mqtt": "^5.10.4",
     "pg": "^8.23.0",

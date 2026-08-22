@@ -18,7 +18,7 @@ export class DeviceStateStore {
 
   public constructor(
     private readonly deviceId: string,
-    private readonly offlineAfterSeconds: number,
+    private offlineAfterSeconds: number,
   ) {}
 
   public getState(now = new Date()): DeviceState {
@@ -33,6 +33,13 @@ export class DeviceStateStore {
 
   public setMqttStatus(status: MqttConnectionStatus): void {
     this.mqttStatus = status;
+  }
+
+  public setOfflineAfterSeconds(seconds: number): void {
+    if (!Number.isInteger(seconds) || seconds <= 0) {
+      throw new Error('offlineAfterSeconds must be a positive integer.');
+    }
+    this.offlineAfterSeconds = seconds;
   }
 
   public updateTelemetry(telemetry: Telemetry): DeviceState {

@@ -63,4 +63,34 @@ export class PostgresCommandRepository implements CommandRepository {
       ...(row.completedAt === null ? {} : { completedAt: toIsoString(row.completedAt) }),
     }));
   }
+
+  public async getRange(deviceId: string, from: string, to: string, limit: number): Promise<CommandRecord[]> {
+    const result = await this.pool.query<CommandHistoryRow>(
+      `SELECT
+        id,
+        device_id AS "deviceId",
+        mqtt_payload AS "mqttPayload",
+        status,
+        response,
+        created_at AS "createdAt",
+        completed_at AS "completedAt"
+      FROM command_logs
+      WHERE device_id = $1
+        AND created_at >= $2::timestamptz
+        AND created_at <= $3::timestamptz
+      ORDER BY created_at ASC
+      LIMIT $4`,
+      [deviceId, from, to, limit],
+    );
+
+    return result.rows.map((row) => ({
+      id: row.id,
+      deviceId: row.deviceId,
+      mqttPayload: row.mqttPayload,
+      status: row.status,
+      ...(row.response === null ? {} : { response: row.response }),
+      createdAt: toIsoString(row.createdAt),
+      ...(row.completedAt === null ? {} : { completedAt: toIsoString(row.completedAt) }),
+    }));
+  }
 }

@@ -44,13 +44,17 @@ test('PostgreSQL migration and repositories work together', { skip: !databaseUrl
   });
   const connectionId = randomUUID();
   const deviceId = `phase2-${randomUUID()}`;
+  const crudConnectionId = randomUUID();
+  const crudDeviceId = `phase5-${randomUUID()}`;
 
   context.after(async () => {
     await setupPool.query('DELETE FROM event_logs WHERE device_id = $1', [deviceId]);
     await setupPool.query('DELETE FROM command_logs WHERE device_id = $1', [deviceId]);
     await setupPool.query('DELETE FROM telemetry WHERE device_id = $1', [deviceId]);
     await setupPool.query('DELETE FROM devices WHERE id = $1', [deviceId]);
+    await setupPool.query('DELETE FROM devices WHERE id = $1', [crudDeviceId]);
     await setupPool.query('DELETE FROM mqtt_connections WHERE id = $1', [connectionId]);
+    await setupPool.query('DELETE FROM mqtt_connections WHERE id = $1', [crudConnectionId]);
     await repositories.close();
     await setupPool.end();
   });
@@ -107,13 +111,25 @@ test('PostgreSQL migration and repositories work together', { skip: !databaseUrl
     runningMode: 'SMART',
     waterTankStatus: 'OK',
     sensorError: 0,
+    filterStatus: 0,
+    fanStatus: 1,
+    heaterStatus: 0,
     receivedAt,
   };
   await repositories.telemetry.save(telemetry);
   const telemetryHistory = await repositories.telemetry.getRange(deviceId, 1);
   assert.equal(telemetryHistory.length, 1);
   assert.equal(telemetryHistory[0].temperature, 27.5);
+  assert.equal(telemetryHistory[0].filterStatus, 0);
+  assert.equal(telemetryHistory[0].fanStatus, 1);
+  assert.equal(telemetryHistory[0].heaterStatus, 0);
   assert.equal(telemetryHistory[0].receivedAt, receivedAt);
+  assert.equal((await repositories.telemetry.getExportRange(
+    deviceId,
+    new Date(Date.now() - 60_000).toISOString(),
+    new Date(Date.now() + 60_000).toISOString(),
+    10,
+  )).length, 1);
 
   const command: CommandRecord = {
     id: randomUUID(),
@@ -132,6 +148,12 @@ test('PostgreSQL migration and repositories work together', { skip: !databaseUrl
   const commands = await repositories.commands.getHistory(deviceId, 20);
   assert.equal(commands.length, 1);
   assert.equal(commands[0].status, 'success');
+  assert.equal((await repositories.commands.getRange(
+    deviceId,
+    new Date(Date.now() - 60_000).toISOString(),
+    new Date(Date.now() + 60_000).toISOString(),
+    10,
+  )).length, 1);
 
   const event: EventRecord = {
     id: randomUUID(),
@@ -145,7 +167,60 @@ test('PostgreSQL migration and repositories work together', { skip: !databaseUrl
   const events = await repositories.events.getHistory(deviceId, 20);
   assert.equal(events.length, 1);
   assert.equal(events[0].id, event.id);
+  assert.equal((await repositories.events.getRange(
+    deviceId,
+    new Date(Date.now() - 60_000).toISOString(),
+    new Date(Date.now() + 60_000).toISOString(),
+    10,
+  )).length, 1);
   assert.equal(await repositories.checkHealth(), true);
+  assert.deepEqual(await repositories.devices.getDataUsage(deviceId), {
+    telemetry: 1,
+    commands: 1,
+    events: 1,
+    total: 3,
+  });
+
+  const crudConnection = await repositories.mqttConnections.create({
+    id: crudConnectionId,
+    name: 'Phase 5 CRUD broker',
+    brokerUrl: 'mqtt://localhost',
+    port: 1884,
+    useTls: false,
+    username: null,
+    encryptedPassword: null,
+    clientIdPrefix: 'phase5',
+    enabled: true,
+  });
+  assert.equal(crudConnection.id, crudConnectionId);
+  assert.ok((await repositories.mqttConnections.getAll()).some((row) => row.id === crudConnectionId));
+  assert.equal((await repositories.mqttConnections.update({
+    ...crudConnection,
+    name: 'Phase 5 CRUD broker updated',
+    enabled: false,
+  }))?.name, 'Phase 5 CRUD broker updated');
+
+  const crudDevice = await repositories.devices.create({
+    id: crudDeviceId,
+    name: 'Phase 5 CRUD device',
+    mqttConnectionId: crudConnectionId,
+    telemetryTopic: `${crudDeviceId}/nhan`,
+    commandTopic: `${crudDeviceId}/caidat`,
+    responseTopic: `${crudDeviceId}/nhan`,
+    offlineAfterSeconds: 25,
+    enabled: false,
+  });
+  assert.ok((await repositories.devices.getAll()).some((row) => row.id === crudDeviceId));
+  assert.equal(await repositories.mqttConnections.countDevices(crudConnectionId), 1);
+  assert.deepEqual(await repositories.devices.getDataUsage(crudDeviceId), {
+    telemetry: 0,
+    commands: 0,
+    events: 0,
+    total: 0,
+  });
+  assert.equal((await repositories.devices.update({ ...crudDevice, name: 'Updated device' }))?.name, 'Updated device');
+  assert.equal(await repositories.devices.delete(crudDeviceId), true);
+  assert.equal(await repositories.mqttConnections.delete(crudConnectionId), true);
 
   await setupPool.query('UPDATE devices SET enabled = FALSE WHERE id = $1', [deviceId]);
   assert.ok(!(await repositories.devices.getEnabled()).some((row) => row.id === deviceId));

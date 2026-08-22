@@ -23,6 +23,9 @@ function initializeSchema(database: DatabaseSync): void {
       running_mode TEXT NOT NULL,
       water_tank_status TEXT NOT NULL,
       sensor_error INTEGER NOT NULL,
+      filter_status INTEGER CHECK (filter_status IN (0, 1)),
+      fan_status INTEGER CHECK (fan_status IN (0, 1)),
+      heater_status INTEGER CHECK (heater_status IN (0, 1)),
       received_at TEXT NOT NULL
     )
   `);

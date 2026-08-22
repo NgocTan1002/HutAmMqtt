@@ -1,3 +1,5 @@
+import type { BinaryStatus } from '../mqtt/telemetry-schema.js';
+
 export type TelemetryHistoryPoint = {
   temperature: number;
   humidity: number;
@@ -8,5 +10,8 @@ export type TelemetryHistoryPoint = {
   runningMode: string;
   waterTankStatus: string;
   sensorError: number;
+  filterStatus: BinaryStatus;
+  fanStatus: BinaryStatus;
+  heaterStatus: BinaryStatus;
   receivedAt: string;
 };

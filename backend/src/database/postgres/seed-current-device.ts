@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 import { env } from '../../config/env.js';
+import { CredentialCipher } from '../../security/credential-cipher.js';
 
 if (!env.DATABASE_URL) throw new Error('DATABASE_URL is required to seed PostgreSQL.');
 
@@ -14,6 +15,14 @@ const brokerPort = mqttUrl.port ? Number(mqttUrl.port) : defaultPort;
 const brokerUrl = `${mqttUrl.protocol}//${mqttUrl.hostname}`;
 const useTls = env.MQTT_USE_TLS || mqttUrl.protocol === 'mqtts:';
 const username = env.MQTT_USERNAME?.trim() || null;
+const encryptedPassword = env.MQTT_PASSWORD
+  ? (() => {
+      if (!env.CONFIG_ENCRYPTION_KEY) {
+        throw new Error('CONFIG_ENCRYPTION_KEY is required to seed an MQTT password.');
+      }
+      return CredentialCipher.fromBase64(env.CONFIG_ENCRYPTION_KEY).encrypt(env.MQTT_PASSWORD);
+    })()
+  : null;
 const pool = new pg.Pool({
   connectionString: env.DATABASE_URL,
   connectionTimeoutMillis: env.DATABASE_CONNECTION_TIMEOUT_MS,
@@ -33,9 +42,9 @@ try {
   if (existingDevice.rowCount === 0) {
     await client.query(
       `INSERT INTO mqtt_connections (
-        id, name, broker_url, port, use_tls, username, client_id_prefix, enabled
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE)`,
-      [connectionId, 'Broker mặc định', brokerUrl, brokerPort, useTls, username, 'nhiet-am-mqtt'],
+        id, name, broker_url, port, use_tls, username, encrypted_password, client_id_prefix, enabled
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE)`,
+      [connectionId, 'Broker mặc định', brokerUrl, brokerPort, useTls, username, encryptedPassword, 'nhiet-am-mqtt'],
     );
   } else {
     await client.query(
@@ -45,11 +54,12 @@ try {
         port = $4,
         use_tls = $5,
         username = $6,
-        client_id_prefix = $7,
+        encrypted_password = COALESCE($7, encrypted_password),
+        client_id_prefix = $8,
         enabled = TRUE,
         updated_at = NOW()
       WHERE id = $1`,
-      [connectionId, 'Broker mặc định', brokerUrl, brokerPort, useTls, username, 'nhiet-am-mqtt'],
+      [connectionId, 'Broker mặc định', brokerUrl, brokerPort, useTls, username, encryptedPassword, 'nhiet-am-mqtt'],
     );
   }
 
@@ -80,9 +90,7 @@ try {
 
   await client.query('COMMIT');
   console.log(`Seeded MQTT connection and device: ${env.DEVICE_ID}`);
-  if (env.MQTT_PASSWORD) {
-    console.log('MQTT password remains in .env; encrypted database storage will be added with MQTT settings management.');
-  }
+  if (env.MQTT_PASSWORD) console.log('The MQTT password was encrypted before database storage.');
 } catch (error) {
   await client.query('ROLLBACK');
   throw error;

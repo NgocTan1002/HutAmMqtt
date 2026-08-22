@@ -47,4 +47,20 @@ export class SqliteEventRepository implements EventRepository {
       LIMIT ?
     `).all(deviceId, limit) as unknown as EventHistoryRow[];
   }
+
+  public async getRange(deviceId: string, from: string, to: string, limit: number): Promise<EventRecord[]> {
+    return this.database.prepare(`
+      SELECT
+        id,
+        device_id AS deviceId,
+        type,
+        severity,
+        message,
+        created_at AS createdAt
+      FROM event_log
+      WHERE device_id = ? AND created_at >= ? AND created_at <= ?
+      ORDER BY created_at ASC
+      LIMIT ?
+    `).all(deviceId, from, to, limit) as unknown as EventHistoryRow[];
+  }
 }

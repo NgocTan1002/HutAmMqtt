@@ -8,6 +8,17 @@ loadDotenv({ path: resolve(projectRoot, '.env') });
 
 const environmentSchema = z.object({
   BACKEND_PORT: z.coerce.number().int().positive().default(3001),
+  CONFIG_REFRESH_INTERVAL_MS: z.coerce.number().int().min(1_000).default(5_000),
+  CONFIG_ENCRYPTION_KEY: z.preprocess(
+    (value) => (typeof value === 'string' && value.trim() === '' ? undefined : value),
+    z.string().trim().refine(
+      (value) => {
+        const decoded = Buffer.from(value, 'base64');
+        return decoded.length === 32 && decoded.toString('base64') === value;
+      },
+      'CONFIG_ENCRYPTION_KEY must be a base64-encoded 32-byte key.',
+    ).optional(),
+  ),
   DATABASE_CONNECTION_TIMEOUT_MS: z.coerce.number().int().positive().default(5_000),
   DATABASE_DRIVER: z.enum(['sqlite', 'postgres']).default('sqlite'),
   DATABASE_IDLE_TIMEOUT_MS: z.coerce.number().int().positive().default(30_000),

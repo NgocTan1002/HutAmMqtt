@@ -17,8 +17,8 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
       `INSERT INTO telemetry (
         device_id, temperature, humidity, coil_temperature, humidity_setpoint,
         temperature_setpoint, running_status, running_mode, water_tank_status,
-        sensor_error, received_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        sensor_error, filter_status, fan_status, heater_status, received_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
       [
         telemetry.deviceId,
         telemetry.temperature,
@@ -30,6 +30,9 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
         telemetry.runningMode,
         telemetry.waterTankStatus,
         telemetry.sensorError,
+        telemetry.filterStatus,
+        telemetry.fanStatus,
+        telemetry.heaterStatus,
         telemetry.receivedAt,
       ],
     );
@@ -48,6 +51,9 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
         running_mode AS "runningMode",
         water_tank_status AS "waterTankStatus",
         sensor_error AS "sensorError",
+        filter_status AS "filterStatus",
+        fan_status AS "fanStatus",
+        heater_status AS "heaterStatus",
         received_at AS "receivedAt"
       FROM telemetry
       WHERE device_id = $1 AND received_at >= $2::timestamptz
@@ -59,5 +65,33 @@ export class PostgresTelemetryRepository implements TelemetryRepository {
       result.rows.map((row) => ({ ...row, receivedAt: toIsoString(row.receivedAt) })),
       maxPoints,
     );
+  }
+
+  public async getExportRange(deviceId: string, from: string, to: string, limit: number): Promise<TelemetryHistoryPoint[]> {
+    const result = await this.pool.query<TelemetryRow>(
+      `SELECT
+        temperature,
+        humidity,
+        coil_temperature AS "coilTemperature",
+        humidity_setpoint AS "humiditySetpoint",
+        temperature_setpoint AS "temperatureSetpoint",
+        running_status AS "runningStatus",
+        running_mode AS "runningMode",
+        water_tank_status AS "waterTankStatus",
+        sensor_error AS "sensorError",
+        filter_status AS "filterStatus",
+        fan_status AS "fanStatus",
+        heater_status AS "heaterStatus",
+        received_at AS "receivedAt"
+      FROM telemetry
+      WHERE device_id = $1
+        AND received_at >= $2::timestamptz
+        AND received_at <= $3::timestamptz
+      ORDER BY received_at ASC
+      LIMIT $4`,
+      [deviceId, from, to, limit],
+    );
+
+    return result.rows.map((row) => ({ ...row, receivedAt: toIsoString(row.receivedAt) }));
   }
 }
